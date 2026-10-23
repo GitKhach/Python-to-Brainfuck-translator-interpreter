@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Компилятор подмножества Python в Brainfuck с 16-битными беззнаковыми числами.
+"""Python subset to Brainfuck compiler with 16-bit unsigned integers.
 
-Использование: python3 py2bf.py программа.py [выход.bf]
-Значения и арифметика работают по модулю 65536. Каждое число занимает две
-Brainfuck-ячейки: младший и старший байты.
+Usage: python3 py2bf.py program.py [output.bf]
+Values and arithmetic operate modulo 65536. Each number occupies two
+Brainfuck cells: low and high bytes.
 """
 import ast
 import sys
@@ -14,7 +14,6 @@ class CompileError(Exception):
 
 
 def const_int(n):
-    """The value of an integer constant (with a unary minus) or None."""
     if isinstance(n, ast.Constant) and isinstance(n.value, (bool, int)):
         return int(n.value)
     if isinstance(n, ast.UnaryOp) and isinstance(n.op, (ast.USub, ast.UAdd)):
@@ -25,10 +24,6 @@ def const_int(n):
 
 
 class ForDesugar(ast.NodeTransformer):
-    """for i in range(a, b, s): ...  ->  заранее считаем число итераций и крутим счётчик.
-
-    (Сравнение i < b ненадёжно: 16-битный счётчик может переполниться.)
-    """
 
     def __init__(self):
         self.n = 0
@@ -174,7 +169,6 @@ class Compiler16:
 
     def add16(self, src, dst):
         sl, sh = src; dl, dh = dst
-        # Unit increments propagate overflow from low to high byte.
         t = self.alloc(); self.copy_cell(sl, t)
         self.goto(t); self.emit('['); self.emit('-')
         test = self.alloc(); self.copy_cell(dl, test); self.goto(test); self.emit('+')
@@ -224,10 +218,8 @@ class Compiler16:
                 def step_both():
                     self.goto(x); self.emit('-'); self.goto(y); self.emit('-'); self.goto(flag); self.emit('+')
                 self.if_cell(ynz, step_both)
-            # Run x_nonzero only when x != 0. zx is consumed above if zero.
             self.is_zero(x, zx)
             self.goto(zx); self.emit('['); self.emit('-'); self.goto(zx); self.emit(']')
-            # Instead use an explicit copy of x as a nonzero gate.
             gate = self.alloc(); self.copy_cell(x, gate)
             self.goto(gate); self.emit('['); self.emit('[-]'); x_nonzero(); self.goto(gate); self.emit(']')
         self.goto(flag); self.emit('['); self.emit('-'); iteration(); self.goto(flag); self.emit(']')
@@ -351,9 +343,8 @@ class Compiler16:
         nz = self.alloc(); self.truth16(divisor, nz)
         lt = self.alloc(); self.lt16(rem, divisor, lt)
         run = self.alloc(); self.set_cell(run, 1)
-        # Each pass is enabled only while divisor != 0 and rem >= divisor.
         self.goto(run); self.emit('['); self.emit('-')
-        self.is_zero(nz, self.alloc())  # scratch only; divisor is checked below
+        self.is_zero(nz, self.alloc())
         active = self.alloc(); self.truth16(divisor, active)
         smaller = self.alloc(); self.lt16(rem, divisor, smaller)
         stop = self.alloc(); self.set_cell(stop, 1)
@@ -549,6 +540,8 @@ class Compiler16:
                 self.alloc_var(n.id)
         self.body(tree.body)
         return optimize(''.join(self.code))
+
+
 def main():
     args = sys.argv[1:]
     if not args or args[0] in ("-h", "--help"):
@@ -559,7 +552,7 @@ def main():
         src = open(args[0], encoding="utf-8").read()
         code = Compiler16().compile(src)
     except (CompileError, SyntaxError, ZeroDivisionError) as e:
-        print("Ошибка компиляции:", e, file=sys.stderr)
+        print("Compilation error:", e, file=sys.stderr)
         sys.exit(1)
     output = "\n".join(code[i:i + 100] for i in range(0, len(code), 100)) + "\n"
     if len(args) > 1:
